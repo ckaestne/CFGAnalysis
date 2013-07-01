@@ -46,15 +46,15 @@ class ReduceCFG {
     final def reduceMut(cfg: CFG): CFG = {
         val nodes = new mutable.ArrayBuffer() ++ cfg.nodes
         var edges = new mutable.ArrayBuffer() ++ cfg.edges
-        val nonFunctions = nodes.filter(n=>(n.kind != "function") && (n.kind!="declaration"))
+        val nonFunctions = nodes.filter(n => (n.kind != "function") && (n.kind != "declaration"))
         println(nonFunctions.size)
-        var i=0
+        var i = 0
 
         for (node <- nonFunctions) {
-            i=i+1
-            if (i%100==0) {
-                print("\n"+i+";")
-                edges= new mutable.ArrayBuffer() ++ (compressRedundantEdges(new CFG(cfg.nodes,Set()++edges)).edges)
+            i = i + 1
+            if (i % 100 == 0) {
+                print("\n" + i + ";")
+                edges = new mutable.ArrayBuffer() ++ (compressRedundantEdges(new CFG(cfg.nodes, Set() ++ edges)).edges)
             }
             print(":")
             val outgoingEdges = edges.filter(_._1 eq node)
@@ -83,9 +83,40 @@ class ReduceCFG {
      * multiple edges between two nodes are collapsed into a single edge
      */
     def compressRedundantEdges(cfg: CFG): CFG = {
-        val uniqueEdges:Map[(CFGNode,CFGNode),Set[(CFGNode, CFGNode, FeatureExpr)]] = cfg.edges.groupBy(e=>(e._1,e._2))
-        val newEdges = uniqueEdges.mapValues(es => es.map(_._3).fold(False)(_ or _)).toList.map(a=>(a._1._1,a._1._2,a._2))
+        val uniqueEdges: Map[(CFGNode, CFGNode), Set[(CFGNode, CFGNode, FeatureExpr)]] = cfg.edges.groupBy(e => (e._1, e._2))
+        val newEdges = uniqueEdges.mapValues(es => es.map(_._3).fold(False)(_ or _)).toList.map(a => (a._1._1, a._1._2, a._2))
         new CFG(cfg.nodes, newEdges.toSet)
+    }
+
+
+    //ignoring variability
+    final def getReachableNodes(cfg: CFG, node: CFGNode, initResults: Set[CFGNode] = Set()): Set[CFGNode] = {
+        val neighbors = cfg.edges.filter(_._1 == node).map(_._2)
+
+        var result = initResults + node
+        for (neighbor <- neighbors) {
+            if (!(result contains neighbor))
+                result = getReachableNodes(cfg, neighbor, result)
+        }
+
+        result
+    }
+
+    private def addOrMerge(result: Map[CFGNode, FeatureExpr], node: CFGNode, ctx: FeatureExpr): Map[CFGNode, FeatureExpr] =
+        result + (node -> (result.getOrElse(node, False) or ctx))
+    private def whenContained(result: Map[CFGNode, FeatureExpr], node: CFGNode): FeatureExpr =
+        result.getOrElse(node, False)
+
+    final def getVAReachableNodes(cfg: CFG, node: CFGNode, ctx: FeatureExpr, initResults: Map[CFGNode, FeatureExpr] = Map()): Map[CFGNode, FeatureExpr] = {
+        val neighborEdges = cfg.edges.filter(_._1 == node)
+
+        var result = addOrMerge(initResults, node, node.fexpr and ctx)
+        for ((_, neighbor, edgeFExpr) <- neighborEdges) {
+            if (((edgeFExpr and ctx) andNot whenContained(result, neighbor)).isSatisfiable)
+                result = getVAReachableNodes(cfg, neighbor, edgeFExpr and ctx, result) // not proceeding with the minimal condition. should not make a difference
+        }
+
+        result
     }
 
 }
