@@ -1,8 +1,10 @@
+package de.fosd.typechef.cfganalysis
+
 import de.fosd.typechef.featureexpr.{FeatureExpr, FeatureExprFactory}
 import de.fosd.typechef.featureexpr.FeatureExprFactory._
 import java.io._
 import junit.framework.Assert._
-import org.junit.{Test}
+import org.junit.Test
 
 class ReduceCFGTest {
 
@@ -125,25 +127,12 @@ class ReduceCFGTest {
     }
 
 
-    @Test
-    def testReduceBusybox {
-        FeatureExprFactory.setDefault(FeatureExprFactory.bdd)
 
-        println("loading")
-        val cfg = new CFGLoader().loadFileCFG(new File("busybox.cfg"))
-        println("reducing")
-        val r = new ReduceCFG()
-        val newcfg = r.removeSelfCycles(r.reduceMut(cfg))
-        println("\nwriting")
-        val w = new FileWriter("busybox_reduced.cfg")
-        newcfg.write(w)
-        w.close
-    }
 
     @Test
     def testRemoveUnreachableNodes {
         //remove nodes that are not target or source of any edge
-        val cfg = new CFGLoader().loadFileCFG(new File("busybox_reduced.cfg"))
+        val cfg = new CFGLoader().loadCFG(new File("busybox_reduced.cfg"))
         val allSourceOrTargetNodes = cfg.edges.map(_._1).toSet ++ cfg.edges.map(_._2).toSet
         println(cfg.nodes.size)
         println(allSourceOrTargetNodes.size)
@@ -185,7 +174,7 @@ class ReduceCFGTest {
 
     @Test
     def cfgMetrics {
-        val cfg = new CFGLoader().loadFileCFG(new File("busybox_reduced2.cfg"))
+        val cfg = new CFGLoader().loadCFG(new File("busybox_reduced2.cfg"))
 
         val functions = cfg.nodes.filter(_.kind=="function").filterNot(blacklistedInlineFunctions contains _.name)
         val functionscount = functions.size
@@ -220,7 +209,7 @@ class ReduceCFGTest {
     @Test
     def cfgMetricsVA {
 
-        val cfg = new CFGLoader().loadFileCFG(new File("busybox_reduced2.cfg"))
+        val cfg = new CFGLoader().loadCFG(new File("busybox_reduced2.cfg"))
 
         val functions = cfg.nodes.filter(_.kind=="function").filterNot(blacklistedInlineFunctions contains _.name)
         val functionscount = functions.size
@@ -237,7 +226,7 @@ class ReduceCFGTest {
         }
 
         val out = totalReach.mkString("\n")
-        println(out)
+//        println(out)
 
         val w = new FileWriter("busybox_reachability.cfg")
         w.write(out)

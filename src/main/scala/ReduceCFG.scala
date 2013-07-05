@@ -1,3 +1,4 @@
+package de.fosd.typechef.cfganalysis
 import de.fosd.typechef.featureexpr.FeatureExpr
 import scala.annotation.tailrec
 import scala.collection.mutable

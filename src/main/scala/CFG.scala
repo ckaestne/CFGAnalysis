@@ -1,10 +1,12 @@
+package de.fosd.typechef.cfganalysis
 import de.fosd.typechef.featureexpr.{FeatureExprFactory, FeatureExprParser, FeatureExpr}
 import java.io.{Writer, FileReader, BufferedReader, File}
+import FeatureExprFactory._
 
 
 class CFGNode(val id: Int, val kind: String, file: File, line: Int, val name: String, val fexpr: FeatureExpr) {
     def write(writer: Writer) {
-        writer.write("N;" + id + ";" + kind + ";" + file.getPath + ";" + line + ";" + name + ";")
+        writer.write("N;" + id + ";" + kind + ";" + (if (file != null) file.getPath else "null") + ";" + line + ";" + name + ";" )
         fexpr.print(writer)
         writer.write("\n")
     }
@@ -67,6 +69,9 @@ case class CFG(val nodes: Set[CFGNode], val edges: Set[(CFGNode, CFGNode, Featur
 
     override def toString(): String = "CFG(" + nodes + ", " + edges + ")"
 
+
+    def checkConsistency: Boolean =
+        edges.forall(e => (nodes contains e._1) && (nodes contains e._2))
 }
 
 
@@ -75,9 +80,12 @@ class CFGLoader {
     val featureExprParser = new FeatureExprParser(FeatureExprFactory.dflt)
 
 
-    def loadNode(s: String, file: File): (Int, CFGNode) = {
+    def loadNode(s: String, file: File, filePC: FeatureExpr, isRawFormat: Boolean): (Int, CFGNode) = {
         val fields = s.split(";")
-        (fields(1).toInt, new CFGNode(IdGen.genId(), fields(2),new File(fields(3)), fields(4).toInt, fields(5), parseFExpr(fields(6))))
+        if (isRawFormat)
+            (fields(1).toInt, new CFGNode(IdGen.genId(), fields(2), file, fields(3).toInt, fields(4), parseFExpr(fields(5)) and filePC))
+        else
+            (fields(1).toInt, new CFGNode(IdGen.genId(), fields(2), new File(fields(3)), fields(4).toInt, fields(5), parseFExpr(fields(6)) and filePC))
     }
 
     private def parseFExpr(s: String): FeatureExpr = featureExprParser.parse(s)
@@ -87,7 +95,14 @@ class CFGLoader {
         (fields(1).toInt, fields(2).toInt, parseFExpr(fields(3)))
     }
 
-    def loadFileCFG(cfgFile: File): CFG = {
+    //load a CFG file for one file
+    def loadFileCFG(cfgFile: File, filePC: FeatureExpr = True): CFG = loadFile(cfgFile, filePC, true)
+
+    //load a whole-project CFG file as a result of a linking process
+    def loadCFG(cfgFile: File, filePC: FeatureExpr = True): CFG = loadFile(cfgFile, filePC, false)
+
+
+    private def loadFile(cfgFile: File, filePC: FeatureExpr, isRawFormat: Boolean): CFG = {
         val reader = new BufferedReader(new FileReader(cfgFile))
 
         var nodes = Map[Int, CFGNode]()
@@ -96,7 +111,7 @@ class CFGLoader {
         var line = reader.readLine()
         while (line != null) {
             if (line.charAt(0) == 'N') {
-                val node = loadNode(line, cfgFile)
+                val node = loadNode(line, cfgFile, filePC, isRawFormat)
                 nodes = nodes + node
             }
             if (line.charAt(0) == 'E') {
@@ -107,7 +122,9 @@ class CFGLoader {
             line = reader.readLine()
         }
 
-        new CFG(nodes.values.toSet, edges.toSet)
+        val n = new CFG(nodes.values.toSet, edges.toSet)
+        assert(n.checkConsistency)
+        n
     }
 
 }
