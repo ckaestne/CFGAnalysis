@@ -1,4 +1,5 @@
 package de.fosd.typechef.cfganalysis
+
 import de.fosd.typechef.featureexpr.{FeatureExprFactory, FeatureExprParser, FeatureExpr}
 import java.io.{Writer, FileReader, BufferedReader, File}
 import FeatureExprFactory._
@@ -6,7 +7,7 @@ import FeatureExprFactory._
 
 class CFGNode(val id: Int, val kind: String, file: File, line: Int, val name: String, val fexpr: FeatureExpr) {
     def write(writer: Writer) {
-        writer.write("N;" + id + ";" + kind + ";" + (if (file != null) file.getPath else "null") + ";" + line + ";" + name + ";" )
+        writer.write("N;" + id + ";" + kind + ";" + (if (file != null) file.getPath else "null") + ";" + line + ";" + name + ";")
         fexpr.print(writer)
         writer.write("\n")
     }
@@ -19,13 +20,16 @@ class CFGNode(val id: Int, val kind: String, file: File, line: Int, val name: St
 case class CFG(val nodes: Set[CFGNode], val edges: Set[(CFGNode, CFGNode, FeatureExpr)]) {
     def link(that: CFG): CFG = {
 
+        var nodesToRemove = Set[CFGNode]()
         val thatFunctions: Map[String, Set[CFGNode]] = that.nodes.filter(_.kind == "function").groupBy(e => e.name)
         var thisReplacements: Map[CFGNode, Set[CFGNode]] = Map()
         for (node <- this.nodes) {
             if (node.kind == "declaration") {
                 val functions = thatFunctions.get(node.name)
-                if (functions.isDefined)
+                if (functions.isDefined) {
                     thisReplacements += (node -> functions.get)
+                    nodesToRemove = nodesToRemove + node
+                }
             }
         }
 
@@ -41,8 +45,10 @@ case class CFG(val nodes: Set[CFGNode], val edges: Set[(CFGNode, CFGNode, Featur
         for (node <- that.nodes) {
             if (node.kind == "declaration") {
                 val functions = thisFunctions.get(node.name)
-                if (functions.isDefined)
+                if (functions.isDefined) {
                     thatReplacements += (node -> functions.get)
+                    nodesToRemove = nodesToRemove + node
+                }
             }
         }
 
@@ -53,7 +59,7 @@ case class CFG(val nodes: Set[CFGNode], val edges: Set[(CFGNode, CFGNode, Featur
         )
 
 
-        new CFG((this.nodes ++ that.nodes).filter(_.fexpr.isSatisfiable()), (newThisEdges ++ newThatEdges).filter(_._3.isSatisfiable()))
+        new CFG((this.nodes ++ that.nodes /*--  nodesToRemove [not consistent]*/).filter(_.fexpr.isSatisfiable()), (newThisEdges ++ newThatEdges).filter(_._3.isSatisfiable()))
     }
 
     def write(writer: Writer) {
@@ -65,6 +71,31 @@ case class CFG(val nodes: Set[CFGNode], val edges: Set[(CFGNode, CFGNode, Featur
         }
     }
 
+    def writeDot(writer: Writer) {
+        writer.write("digraph \"\" {\nnode [shape=record];\n")
+        for (n <- nodes)
+            writer.write( """"%d"[label="{{%s}|%s}", color="%s", fontname="Calibri", style="filled", fillcolor="white"];""".format(n.id, esc(n.name), /*esc(n.fexpr.toString)*/ "1",
+                if (n.kind == "function") "blue" else "black"
+            ) + "\n")
+
+        for (e <- edges)
+            writer.write( """"%d" -> "%d"[label="%s"];""".format(e._1.id, e._2.id, /*esc(e._3.toString())*/ "1") + "\n")
+        writer.write("}")
+    }
+
+    private def esc(i: String) = {
+        i.replace("\n", "\\l").
+            replace("{", "\\{").
+            replace("}", "\\}").
+            replace("<", "\\<").
+            replace(">", "\\>").
+            replace("\"", "\\\"").
+            replace("|", "\\|").
+            replace(" ", "\\ ").
+            replace("\\\"", "\\\\\"").
+            replace("\\\\\"", "\\\\\\\"").
+            replace("\\\\\\\\\"", "\\\\\\\"")
+    }
 
 
     override def toString(): String = "CFG(" + nodes + ", " + edges + ")"

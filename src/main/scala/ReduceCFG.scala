@@ -1,4 +1,5 @@
 package de.fosd.typechef.cfganalysis
+
 import de.fosd.typechef.featureexpr.FeatureExpr
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -18,7 +19,7 @@ class ReduceCFG {
 
     @tailrec
     final def reduce(cfg: CFG): CFG =
-        cfg.nodes.find(_.kind != "function") match {
+        cfg.nodes.find(eliminateNode(_)) match {
             case None => cfg
             case Some(node) => reduce(removeNode(cfg, node))
         }
@@ -40,24 +41,28 @@ class ReduceCFG {
     }
 
 
+    private def eliminateNode(n: CFGNode): Boolean =
+        (n.kind != "function") && (n.kind != "function-inline") && (n.kind != "declaration")
+
+
     /**
      * equivalent implementation of reduce optimized for performance by using mutable data structures
      * and compressing redundant edges every 100 computations
      */
-    final def reduceMut(cfg: CFG): CFG = {
+    final def reduceMut(cfg: CFG, progressOutput: Boolean = false): CFG = {
         val nodes = new mutable.ArrayBuffer() ++ cfg.nodes
         var edges = new mutable.ArrayBuffer() ++ cfg.edges
-        val nonFunctions = nodes.filter(n => (n.kind != "function") && (n.kind != "declaration"))
-        println(nonFunctions.size)
+        val nonFunctions = nodes.filter(n => eliminateNode(n))
+        if (progressOutput) println(nonFunctions.size)
         var i = 0
 
         for (node <- nonFunctions) {
             i = i + 1
-            if (i % 100 == 0) {
-                print("\n" + i + ";")
+            if (i % 2 == 0) {
+                if (progressOutput) print("\n" + i + ";")
                 edges = new mutable.ArrayBuffer() ++ (compressRedundantEdges(new CFG(cfg.nodes, Set() ++ edges)).edges)
             }
-            print(":")
+            if (progressOutput) print(":")
             val outgoingEdges = edges.filter(_._1 eq node)
             val incomingEdges = edges.filter(_._2 eq node)
 
@@ -67,7 +72,7 @@ class ReduceCFG {
                                 if !(inEdge._1 eq node)) yield
                 (inEdge._1, outEdge._2, inEdge._3 and outEdge._3)
 
-            print(newEdges.size)
+            if (progressOutput) print(newEdges.size)
 
             nodes.-=(node)
             edges.--=(incomingEdges)
