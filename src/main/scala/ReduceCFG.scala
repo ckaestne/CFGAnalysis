@@ -42,23 +42,23 @@ class ReduceCFG {
 
 
     private def eliminateNode(n: CFGNode): Boolean =
-        (n.kind != "function") && (n.kind != "function-inline") && (n.kind != "declaration")
+        (n.kind != "function") && (n.kind != "function-inline") && (n.kind != "function-static") && (n.kind != "declaration")
 
 
     /**
      * equivalent implementation of reduce optimized for performance by using mutable data structures
      * and compressing redundant edges every 100 computations
      */
-    final def reduceMut(cfg: CFG, progressOutput: Boolean = false): CFG = {
+    final def reduceMut(cfg: CFG, progressOutput: Boolean = false, compressRate: Int = 100, nodeFilter: CFGNode => Boolean = this.eliminateNode): CFG = {
         val nodes = new mutable.ArrayBuffer() ++ cfg.nodes
         var edges = new mutable.ArrayBuffer() ++ cfg.edges
-        val nonFunctions = nodes.filter(n => eliminateNode(n))
+        val nonFunctions = nodes.filter(n => nodeFilter(n))
         if (progressOutput) println(nonFunctions.size)
         var i = 0
 
         for (node <- nonFunctions) {
             i = i + 1
-            if (i % 2 == 0) {
+            if ((compressRate>1) && (i % compressRate == 0)) {
                 if (progressOutput) print("\n" + i + ";")
                 edges = new mutable.ArrayBuffer() ++ (compressRedundantEdges(new CFG(cfg.nodes, Set() ++ edges)).edges)
             }
